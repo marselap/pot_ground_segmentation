@@ -17,6 +17,8 @@ import cv2 as cv
 import numpy as np
 import math 
 
+import pcl
+
 
 
 def point_cloud(points, parent_frame):
@@ -56,6 +58,45 @@ def point_cloud(points, parent_frame):
 
 
 
+def point_cloud_gray(points, parent_frame):
+    """ Creates a point cloud message.
+    Args:
+        points: Nx3 array of xyz positions (m)
+        parent_frame: frame in which the point cloud is defined
+    Returns:
+        sensor_msgs/PointCloud2 message
+    """
+    ros_dtype = PointField.FLOAT32
+    dtype = np.float32
+    itemsize = np.dtype(dtype).itemsize
+
+    data = points.astype(dtype).tobytes()
+
+    offsets = [0,4,8]
+
+    fields = [PointField(
+        name=n, offset=offsets[i], datatype=ros_dtype, count=1)
+        for i, n in enumerate(['x','y','z'])]
+
+
+    header = Header(frame_id=parent_frame, stamp=rospy.Time.now())
+
+    return PointCloud2(
+        header=header,
+        height=1,
+        width=points.shape[0],
+        is_dense=False,
+        is_bigendian=False,
+        fields=fields,
+        # point_step=itemsize*8,
+        point_step=itemsize,
+        # row_step=itemsize*4*points.shape[0],
+        row_step=16*points.shape[0],
+        data=data
+    )
+
+
+
 class GroundSegment():
     def __init__(self):
         self.bridge = CvBridge()
@@ -68,6 +109,7 @@ class GroundSegment():
         self.pc_sub = rospy.Subscriber("/camera/depth_registered/points", PointCloud2, self.pc_callback)
 
         self.pc_pub = rospy.Publisher("/segmented_cloud", PointCloud2, queue_size=10)
+        self.pc_pub_plane = rospy.Publisher("/segmented_plane", PointCloud2, queue_size=10)
 
         self.segmentation = Segmentor()
 
@@ -142,6 +184,28 @@ def main():
                     
                     pc = point_cloud(points, 'camera_color_optical_frame')
                     gs.pc_pub.publish(pc)
+
+                    cloud = pcl.PointCloud()
+                    cloud.from_array(points[:,0:3])
+                    seg = cloud.make_segmenter_normals(ksearch=50)
+                    seg.set_optimize_coefficients(True)
+                    seg.set_model_type(pcl.SACMODEL_PLANE)
+                    seg.set_normal_distance_weight(0.05)
+                    seg.set_method_type(pcl.SAC_RANSAC)
+                    seg.set_max_iterations(100)
+                    seg.set_distance_threshold(0.005)
+                    inliers, model = seg.segment()
+
+                    print("model")
+                    print(model)
+
+                    if len(inliers)>1:
+
+                        points2 = points[inliers, :]
+                        points2 = np.array(points2)
+                        pc = point_cloud(points2, 'camera_color_optical_frame')
+                        gs.pc_pub_plane.publish(pc)
+
 
                     # points = np.expand_dims(points, axis=1)
                     
