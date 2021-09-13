@@ -217,23 +217,15 @@ def main():
                     cloud_out = do_transform_cloud(pc, trans)
 
                     cloud_out_rgb = do_transform_cloud(pc_rgb, trans)
-                    
 
                     gs.pc_pub_glob.publish(cloud_out_rgb)
-                    # gs.pc_pub_glob.publish(cloud_out)
-
+                  
                     points_glob = ros_numpy.point_cloud2.pointcloud2_to_array(cloud_out_rgb)
-                    # points_glob = ros_numpy.point_cloud2.pointcloud2_to_array(cloud_out)
-
                     points_g = []
                     for row in points_glob:
                         points_g.append([row[0], row[1], row[2]])
-                    # print("glob: ", np.shape(points_g))
-                    # print("loc: ", np.shape(points))
-
+                    
                     cloud = pcl.PointCloud()
-                    # cloud.from_array()
-                    # cloud.from_array(points[:,0:3])
                     cloud.from_array(np.array(points_g))
                     seg = cloud.make_segmenter_normals(ksearch=50)
                     seg.set_optimize_coefficients(True)
@@ -260,7 +252,6 @@ def main():
                         pc = point_cloud(points2, gs.target_frame)
                         gs.pc_pub_plane.publish(pc)
 
-                        # print("pos center")
                         not_nan = []
                         for p in points2:
                             if not math.isnan(np.sum(p)) and not math.isinf(np.sum(p)):
@@ -269,18 +260,14 @@ def main():
                         not_nan=not_nan.transpose()
 
                         try:
-                            print(np.min(not_nan[0][:]), np.mean(not_nan[0][:]), np.max(not_nan[0][:]), np.median(not_nan[0][:]))
-                            print("\n")
-                            print(np.min(not_nan[1][:]), np.mean(not_nan[1][:]), np.max(not_nan[1][:]), np.median(not_nan[1][:]))
-                            print("\n")
-                            print(np.min(not_nan[2][:]), np.mean(not_nan[2][:]), np.max(not_nan[2][:]), np.median(not_nan[2][:]))
-                            print("\n")
-
-                            print("r x: ", np.max(not_nan[0][:])-np.min(not_nan[0][:]))
-                            print("r y: ", np.max(not_nan[1][:])-np.min(not_nan[1][:]))
-                            # print(np.mean(not_nan[1][:]))
-                            # print(np.mean(not_nan[2][:]))
-                            # print(-model[3]/model[2])
+                            # print(np.min(not_nan[0][:]), np.mean(not_nan[0][:]), np.max(not_nan[0][:]), np.median(not_nan[0][:]))
+                            # print("\n")
+                            # print(np.min(not_nan[1][:]), np.mean(not_nan[1][:]), np.max(not_nan[1][:]), np.median(not_nan[1][:]))
+                            # print("\n")
+                            # print(np.min(not_nan[2][:]), np.mean(not_nan[2][:]), np.max(not_nan[2][:]), np.median(not_nan[2][:]))
+                            # print("\n")
+                            # print("r x: ", np.max(not_nan[0][:])-np.min(not_nan[0][:]))
+                            # print("r y: ", np.max(not_nan[1][:])-np.min(not_nan[1][:]))
 
                             msg = PointStamped()
                             msg.header = Header(frame_id=gs.target_frame, stamp=rospy.Time.now())
