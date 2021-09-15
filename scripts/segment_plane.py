@@ -7,7 +7,7 @@ import ros_numpy
 from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header 
 
-from segmentation_class import Segmentor
+from segmentation_class_2d import Segmentor
 
 import cv2 as cv
 import numpy as np
