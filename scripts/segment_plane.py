@@ -6,8 +6,11 @@ import ros_numpy
 
 from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header 
+from geometry_msgs.msg import PointStamped
 
 from segmentation_class_2d import Segmentor
+from pc_segmentation_class import PCSegmentor
+
 
 import cv2 as cv
 import numpy as np
@@ -56,23 +59,38 @@ def point_cloud(points, parent_frame):
 class GroundSegment():
     def __init__(self):
 
-        self.pc_sub = rospy.Subscriber("/segmented_cloud", PointCloud2, self.pc_callback)
+        # self.pc_sub = rospy.Subscriber("/segmented_cloud", PointCloud2, self.pc_callback)
+        # self.pc_sub = rospy.Subscriber("/ground_pc", PointCloud2, self.pc_callback)
+        self.pc_sub = rospy.Subscriber("/camera/depth_registered/points", PointCloud2, self.pc_callback)
 
         self.pc_pub = rospy.Publisher("/segmented_plane", PointCloud2, queue_size=10)
 
+        self.ground_center_pub = rospy.Publisher("/ground_center", PointStamped, queue_size=10)
+
         self.pc_array = None    
+
+        self.segmentation = PCSegmentor(None)
+
+        self.target_frame = 'panda_link0'
+        self.source_frame = 'panda_camera'
+
+        self.got_pc = False
 
 
     def pc_callback(self, pc_message):
 
-        print (pc_message.fields)
-        print (pc_message.point_step)
-        print (pc_message.row_step)
-        print (pc_message.height)
-        print (pc_message.width*pc_message.point_step)
+        self.segmentation.set_pointcloud(pc_message)
+
+        self.got_pc = True
+        # print (pc_message.fields)
+        # print (pc_message.point_step)
+        # print (pc_message.row_step)
+        # print (pc_message.height)
+        # print (pc_message.width*pc_message.point_step)
 
 
-        self.pc_array = ros_numpy.point_cloud2.pointcloud2_to_array(pc_message)
+        # self.pc_array = ros_numpy.point_cloud2.pointcloud2_to_array(pc_message)
+
 
 
 
@@ -86,11 +104,28 @@ def main():
 
     while not rospy.is_shutdown():
 
+        # if gs.pc_array is not None:
+        if gs.got_pc:
 
-        if gs.pc_array is not None:
+            pc_pc2 = gs.segmentation.segment()
+
+
+            gs.pc_array = ros_numpy.point_cloud2.pointcloud2_to_array(pc_pc2)
+
+            # print (gs.pc_array.fields)
+            # print (gs.pc_array.point_step)
+            # print (gs.pc_array.row_step)
+            # print (gs.pc_array.height)
+            # print (gs.pc_array.width*gs.pc_array.point_step)
+
+            points_g = []
+            for row in gs.pc_array:
+                
+                points_g.append([row[0], row[1], row[2]])
 
             cloud = pcl.PointCloud()
-            cloud.from_array(gs.pc_array)
+            cloud.from_array(np.array(points_g))
+
             seg = cloud.make_segmenter_normals(ksearch=50)
             seg.set_optimize_coefficients(True)
             seg.set_model_type(pcl.SACMODEL_PLANE)
@@ -100,12 +135,53 @@ def main():
             seg.set_distance_threshold(0.005)
             inliers, model = seg.segment()
 
-            if len(points)>1:
-                # points = np.array(points)
-                
-                pc = point_cloud(inliers, 'camera_color_optical_frame')
+            # print("model") # ax + by + cz + d = 0 
+            # print(model) 
+
+            points = []
+            for row in gs.pc_array:
+                points.append([row[0], row[1], row[2], row[3]])
+            points = np.array(points)
+
+
+            if len(inliers)>1:
+
+                points2 = points[inliers, :]
+                points2 = np.array(points2)
+                pc = point_cloud(points2, gs.target_frame)
                 gs.pc_pub.publish(pc)
 
+                not_nan = []
+                for p in points2:
+                    if not math.isnan(np.sum(p)) and not math.isinf(np.sum(p)):
+                        not_nan.append(p[:3])
+                not_nan = np.array(not_nan)
+                not_nan=not_nan.transpose()
+
+                try:
+                    # print(np.min(not_nan[0][:]), np.mean(not_nan[0][:]), np.max(not_nan[0][:]), np.median(not_nan[0][:]))
+                    # print("\n")
+                    # print(np.min(not_nan[1][:]), np.mean(not_nan[1][:]), np.max(not_nan[1][:]), np.median(not_nan[1][:]))
+                    # print("\n")
+                    # print(np.min(not_nan[2][:]), np.mean(not_nan[2][:]), np.max(not_nan[2][:]), np.median(not_nan[2][:]))
+                    # print("\n")
+                    # print("r x: ", np.max(not_nan[0][:])-np.min(not_nan[0][:]))
+                    # print("r y: ", np.max(not_nan[1][:])-np.min(not_nan[1][:]))
+
+                    msg = PointStamped()
+                    msg.header = Header(frame_id=gs.target_frame, stamp=rospy.Time.now())
+                    msg.point.x = np.mean(not_nan[0][:])
+                    msg.point.y = np.mean(not_nan[1][:]-0.) # 8cm od sredine za impedancija eksp s pikanjem
+                    msg.point.z = np.mean(not_nan[2][:]+0.) # pomak od panda_link8 do vrha senzora
+
+                    gs.ground_center_pub.publish(msg)
+
+                    
+                except IndexError:
+                    print("ups")
+                    pass
+                
+                gs.got_pc = False
 
 
 

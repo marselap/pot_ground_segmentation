@@ -11,6 +11,7 @@ from std_msgs.msg import Header
 from geometry_msgs.msg import PointStamped
 
 from segmentation_class_2d import Segmentor
+# from pc_segmentation_class import PCSegmentor
 
 from dynamic_reconfigure.server import Server
 from pot_ground_segmentation.cfg import HsvMaskConfig
@@ -35,6 +36,7 @@ class GroundSegment():
 
 
         self.segmentation = Segmentor()
+        # self.segmentation = PCSegmentor()
 
         self.target_frame = 'panda_link0'
         self.source_frame = 'panda_camera'
@@ -63,6 +65,8 @@ class GroundSegment():
 
         self.pc_array = None    
 
+        self.cloud_loc = None
+        self.pc_glob = rospy.Publisher("/full_cloud_glob", PointCloud2, queue_size=10)
 
     def dynamic_recon_cb(self, config, level):
         mask_lower = (config['hue_L'], config['sat_L'], config['val_L'])
@@ -89,6 +93,9 @@ class GroundSegment():
     def pc_callback(self, pc_message):
 
         self.pc_array = ros_numpy.point_cloud2.pointcloud2_to_array(pc_message)
+        self.cloud_loc = pc_message
+        # self.segmentation.set_pointcloud(pc_message)
+
 
 
 def main():
@@ -145,6 +152,9 @@ def main():
 
                     gs.pc_pub_glob.publish(cloud_out_rgb)
                   
+                    cloud_glob = do_transform_cloud(gs.cloud_loc, trans)
+                    gs.pc_glob.publish(cloud_glob)
+
                     points_glob = ros_numpy.point_cloud2.pointcloud2_to_array(cloud_out_rgb)
                     points_g = []
                     for row in points_glob:
