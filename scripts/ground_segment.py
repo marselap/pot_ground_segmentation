@@ -155,6 +155,8 @@ def main():
                     cloud_glob = do_transform_cloud(gs.cloud_loc, trans)
                     gs.pc_glob.publish(cloud_glob)
 
+
+
                     points_glob = ros_numpy.point_cloud2.pointcloud2_to_array(cloud_out_rgb)
                     points_g = []
                     for row in points_glob:
@@ -207,8 +209,12 @@ def main():
                             msg = PointStamped()
                             msg.header = Header(frame_id=gs.target_frame, stamp=rospy.Time.now())
                             msg.point.x = np.mean(not_nan[0][:])
-                            msg.point.y = np.mean(not_nan[1][:]-0.08) # 8cm od sredine za impedancija eksp s pikanjem
-                            msg.point.z = np.mean(not_nan[2][:]+0.165) # pomak od panda_link8 do vrha senzora
+                            # msg.point.y = np.mean(not_nan[1][:]-0.08) # 8cm od sredine za impedancija eksp s pikanjem
+                            # msg.point.z = np.mean(not_nan[2][:]+0.165) # pomak od panda_link8 do vrha senzora
+
+                            msg.point.y = np.mean(not_nan[1][:]-0.0) # 8cm od sredine za impedancija eksp s pikanjem
+                            msg.point.z = np.mean(not_nan[2][:]+0.) # pomak od panda_link8 do vrha senzora
+
 
                             gs.ground_center_pub.publish(msg)
                         except IndexError:

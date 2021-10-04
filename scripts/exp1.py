@@ -4,7 +4,7 @@ import rospy
 
 import ros_numpy
 
-from std_msgs.msg import Header 
+from std_msgs.msg import Header, Bool
 
 from geometry_msgs.msg import PointStamped, PoseStamped, WrenchStamped, Pose
 
@@ -44,6 +44,8 @@ p2.orientation.w = 0.02805732818527244
 class ExperimentFlow():
     def __init__(self):
 
+        self.get_ground_centre = False
+
         # time.sleep(2.)
         self.image_sub = rospy.Subscriber("/ground_center", PointStamped, self.ground_center_cb)
 
@@ -71,8 +73,9 @@ class ExperimentFlow():
         self.no_force = WrenchStamped()
 
     def ground_center_cb(self, msg):
-
-        self.ground_msg = msg.point
+        
+        if self.get_ground_centre:
+            self.ground_msg = msg.point
 
 
 def main():
@@ -90,11 +93,16 @@ def main():
         print("Went to init. Sleeping for...")
         sleep_dur = 5
         for i in range(sleep_dur):
-            print(int(sleep_dur - i))
-    
+            print(int(sleep_dur - i))    
             time.sleep(1.0)
+        
+        exp.get_ground_centre = True
+        while exp.ground_msg is None:
+            time.sleep(1.0)
+        
         exp.ground_center = exp.ground_msg
-
+        exp.get_ground_centre = False
+        
         print("Done. Go to upper point..")
 
         msg = exp.pose_up
@@ -124,7 +132,7 @@ def main():
         msg.header = Header(frame_id="panda_link0", stamp=rospy.Time.now())
         exp.ft_ref_pub.publish(msg)
         print("Applying force. Sleeping for...")
-        sleep_dur = 20
+        sleep_dur = 30
         for i in range(sleep_dur):
             print(int(sleep_dur - i))
             time.sleep(1.0)

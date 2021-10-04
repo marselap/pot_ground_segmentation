@@ -18,6 +18,10 @@ import math
 
 import pcl
 
+import tf2_ros
+from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
+import time
+
 
 def point_cloud(points, parent_frame):
     """ Creates a point cloud message.
@@ -59,6 +63,12 @@ def point_cloud(points, parent_frame):
 class GroundSegment():
     def __init__(self):
 
+
+        self.tfBuffer = tf2_ros.Buffer()
+        listener = tf2_ros.TransformListener(self.tfBuffer)
+
+        time.sleep(2.)
+
         # self.pc_sub = rospy.Subscriber("/segmented_cloud", PointCloud2, self.pc_callback)
         # self.pc_sub = rospy.Subscriber("/ground_pc", PointCloud2, self.pc_callback)
         self.pc_sub = rospy.Subscriber("/camera/depth_registered/points", PointCloud2, self.pc_callback)
@@ -66,6 +76,9 @@ class GroundSegment():
         self.pc_pub = rospy.Publisher("/segmented_plane", PointCloud2, queue_size=10)
 
         self.ground_center_pub = rospy.Publisher("/ground_center", PointStamped, queue_size=10)
+
+        self.pc_glob = rospy.Publisher("/full_cloud_glob", PointCloud2, queue_size=10)
+
 
         self.pc_array = None    
 
@@ -79,8 +92,6 @@ class GroundSegment():
 
     def pc_callback(self, pc_message):
 
-        self.segmentation.set_pointcloud(pc_message)
-
         self.got_pc = True
         # print (pc_message.fields)
         # print (pc_message.point_step)
@@ -88,7 +99,7 @@ class GroundSegment():
         # print (pc_message.height)
         # print (pc_message.width*pc_message.point_step)
 
-
+        self.pc_msg = pc_message
         # self.pc_array = ros_numpy.point_cloud2.pointcloud2_to_array(pc_message)
 
 
@@ -106,6 +117,18 @@ def main():
 
         # if gs.pc_array is not None:
         if gs.got_pc:
+
+
+            try:
+                trans = gs.tfBuffer.lookup_transform(gs.target_frame, gs.source_frame, rospy.Time())
+            except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+                print("Did not get transform")
+                continue
+
+            cloud_glob = do_transform_cloud(gs.pc_msg, trans)
+            gs.pc_glob.publish(cloud_glob)
+
+            gs.segmentation.set_pointcloud(cloud_glob)
 
             pc_pc2 = gs.segmentation.segment()
 
@@ -171,7 +194,7 @@ def main():
                     msg = PointStamped()
                     msg.header = Header(frame_id=gs.target_frame, stamp=rospy.Time.now())
                     msg.point.x = np.mean(not_nan[0][:])
-                    msg.point.y = np.mean(not_nan[1][:]-0.) # 8cm od sredine za impedancija eksp s pikanjem
+                    msg.point.y = np.min(not_nan[1][:]+0.05) # 8cm od sredine za impedancija eksp s pikanjem
                     msg.point.z = np.mean(not_nan[2][:]+0.) # pomak od panda_link8 do vrha senzora
 
                     gs.ground_center_pub.publish(msg)

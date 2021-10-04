@@ -6,7 +6,7 @@ import numpy as np
 from sensor_msgs.msg import PointCloud2
 
 class PCSegmentor():
-    def __init__(self, pc_msg = None, z_lower_limit = 0.5, initial_delta_z = 0.1, z_upper_limit = 0.7, y_upper_limit = 1):
+    def __init__(self, pc_msg = None, z_lower_limit = 0.3, initial_delta_z = 0.1, z_upper_limit = 1.0, y_upper_limit = 1.):
         self.z_lower_limit = z_lower_limit;
         self.z_upper_limit = z_upper_limit;
         self.initial_delta_z = initial_delta_z;
@@ -40,7 +40,7 @@ class PCSegmentor():
 
 
 
-    def segment(self, publish_colored_pc = True):
+    def segment(self, publish_colored_pc = False):
         """ Segments the ground from the pointcloud.
         Args:
             publish_colored_pc: if True, publishes pc with colored segments on /colored_pc topic
@@ -58,9 +58,9 @@ class PCSegmentor():
         points_sorted = np.copy(self.points_sorted_orig)
 
         while delta_z > 0.015:
-            print("===== NEW ITERATION =====")
-            print("Delta z:" + str(delta_z) + "\n")
-            print("Min z:" + str(z_min))
+            # print("===== NEW ITERATION =====")
+            # print("Delta z:" + str(delta_z) + "\n")
+            # print("Min z:" + str(z_min))
 
             point_counter = 0
             sector_counter = 1
@@ -72,14 +72,14 @@ class PCSegmentor():
                 z_curr = z_values_curr[i]
 
                 if z_curr < z_max:
-                    points_sorted['rgb'][i] = rgba_current
+                    # points_sorted['rgb'][i] = rgba_current
                     point_counter += 1
                     i += 1
                 else:
                     sector_pts.append(point_counter)
-                    print("Segment " + str(sector_counter) + ": " + str(point_counter) + " points\n")
+                    # print("Segment " + str(sector_counter) + ": " + str(point_counter) + " points\n")
                     z_min = z_max
-                    print("Min z:" + str(z_min))
+                    # print("Min z:" + str(z_min))
                     z_max = z_min + delta_z
 
                     point_counter = 0
@@ -87,9 +87,12 @@ class PCSegmentor():
                     rgba_current += 0.02
 
             sector_pts.append(point_counter)
-            print("Segment " + str(sector_counter) + ": " + str(point_counter) + " points\n")
+            # print("Segment " + str(sector_counter) + ": " + str(point_counter) + " points\n")
 
             index = self.select_segment(sector_pts)
+
+            if index is None:
+                return None
 
             if(publish_colored_pc):
                 pc_colored = ros_numpy.point_cloud2.array_to_pointcloud2(points_sorted, frame_id=self.frame_id)
@@ -122,28 +125,31 @@ class PCSegmentor():
             index of selected segment
         """
         delta_sectors = []
-        for i in range(len(sector_pts)):
-            if i == 0:
-                delta_curr = abs(sector_pts[0]-sector_pts[1])/(sector_pts[0]+sector_pts[1]+1) * sector_pts[0]
+        if len(sector_pts) > 1:
+            for i in range(len(sector_pts)):
+                if i == 0:
+                    delta_curr = abs(sector_pts[0]-sector_pts[1])/(sector_pts[0]+sector_pts[1]+1) * sector_pts[0]
 
-            elif i == len(sector_pts)-1:
-                delta_curr = abs(sector_pts[-2]-sector_pts[-1])/(sector_pts[-2]+sector_pts[-1]+1) * sector_pts[-1]
+                elif i == len(sector_pts)-1:
+                    delta_curr = abs(sector_pts[-2]-sector_pts[-1])/(sector_pts[-2]+sector_pts[-1]+1) * sector_pts[-1]
 
-            else:
-                prev = sector_pts[i-1]
-                curr = sector_pts[i]
-                next = sector_pts[i+1]
+                else:
+                    prev = sector_pts[i-1]
+                    curr = sector_pts[i]
+                    next_ = sector_pts[i+1]
 
-                d_prev = abs(prev-curr)/(prev+curr+1) * curr
-                d_next = abs(curr-next)/(curr+next+1) * curr
+                    d_prev = abs(prev-curr)/(prev+curr+1) * curr
+                    d_next_ = abs(curr-next_)/(curr+next_+1) * curr
 
-                delta_curr = (d_prev+d_next)/2
+                    delta_curr = (d_prev+d_next_)/2
 
-            delta_sectors.append(delta_curr)
+                delta_sectors.append(delta_curr)
+        else:
+            return None
 
-        print("Scores of segments: " + str(delta_sectors))
+        # print("Scores of segments: " + str(delta_sectors))
         max_value = max(delta_sectors)
         index = delta_sectors.index(max_value)
-        print("Selecting segment: " + str(index+1))
+        # print("Selecting segment: " + str(index+1))
 
         return index
