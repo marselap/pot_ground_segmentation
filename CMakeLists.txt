@@ -13,6 +13,9 @@ find_package(catkin REQUIRED
 generate_dynamic_reconfigure_options(
   cfg/HsvMask.cfg
 )
+
+
+
 # add_dependencies(example_node ${PROJECT_NAME}_gencfg)
 
 
