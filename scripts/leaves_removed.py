@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import rospy
 
@@ -11,7 +11,7 @@ from std_msgs.msg import Header
 from geometry_msgs.msg import PointStamped
 
 from segmentation_class_2d import Segmentor
-# from pc_segmentation_class import PCSegmentor
+from pc_segmentation_class import PCSegmentor
 
 from dynamic_reconfigure.server import Server
 from pot_ground_segmentation.cfg import HsvMaskConfig
@@ -36,7 +36,7 @@ class GroundSegment():
 
 
         self.segmentation = Segmentor()
-        # self.segmentation = PCSegmentor()
+        self.segmentation_3d = PCSegmentor()
 
         self.target_frame = 'panda_link0'
         self.source_frame = 'panda_camera'
@@ -119,7 +119,9 @@ def main():
                 temp_array = gs.pc_array
                 gs.pc_array = None
                 
-                gray_mask = cv.cvtColor(mask, cv.COLOR_BGR2GRAY)
+                gray_mask_leaves = cv.cvtColor(mask, cv.COLOR_BGR2GRAY)
+                gray_mask = cv.bitwise_not(gray_mask_leaves, gray_mask_leaves)
+
 
                 xmax, ymax = np.shape(gray_mask)
                 for ix in range(xmax):
@@ -134,11 +136,7 @@ def main():
                     m, _ = np.shape(points)
                     points = np.array(points)
 
-                    pc = point_cloud_gray(points, gs.source_frame)
-
-
                     pc_rgb = point_cloud(points, gs.source_frame)
-
                     gs.pc_pub_loc.publish(pc_rgb)
 
                     try:
@@ -146,22 +144,39 @@ def main():
                     except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
                         print("Did not get transform")
                         return
-                    cloud_out = do_transform_cloud(pc, trans)
 
                     cloud_out_rgb = do_transform_cloud(pc_rgb, trans)
-
-                    gs.pc_pub_glob.publish(cloud_out_rgb)
+                    # gs.pc_pub_glob.publish(cloud_out_rgb)
                   
-                    cloud_glob = do_transform_cloud(gs.cloud_loc, trans)
-                    gs.pc_glob.publish(cloud_glob)
+                    # cloud_glob = do_transform_cloud(gs.cloud_loc, trans)
+                    # gs.pc_glob.publish(cloud_glob)
+
+                    gs.segmentation_3d.set_pointcloud(cloud_out_rgb)
+                    pc_pc2 = gs.segmentation_3d.segment()
 
 
 
-                    points_glob = ros_numpy.point_cloud2.pointcloud2_to_array(cloud_out_rgb)
-                    points_g = []
-                    for row in points_glob:
-                        points_g.append([row[0], row[1], row[2]])
+                    if pc_pc2 is None:
+                        print("Blind...")
+                        continue
+
+                    # print(pc_pc2.fields)
+
+
+                    points_glob = ros_numpy.point_cloud2.pointcloud2_to_array(pc_pc2)
+                    # points_g = []
+                    # for row in points_glob:
+                    #     points_g.append([row[0], row[1], row[2]])
                     
+
+                    points = []
+                    for row in points_glob:
+                        points.append([row[0], row[1], row[2], row[3]])
+                    points = np.array(points)
+
+                    points_g = points[:,0:3]
+
+
                     cloud = pcl.PointCloud()
                     cloud.from_array(np.array(points_g))
                     seg = cloud.make_segmenter_normals(ksearch=50)
@@ -176,44 +191,43 @@ def main():
                     # print("model") # ax + by + cz + d = 0 
                     # print(model) 
 
-                    points = []
-                    for row in points_glob:
-                        points.append([row[0], row[1], row[2], row[3]])
-                    points = np.array(points)
+                    # points = []
+                    # for row in points_glob:
+                    #     points.append([row[0], row[1], row[2], row[3]])
+                    # points = np.array(points)
 
 
                     if len(inliers)>1:
 
                         points2 = points[inliers, :]
                         points2 = np.array(points2)
-                        pc = point_cloud(points2, gs.target_frame)
-                        gs.pc_pub_plane.publish(pc)
+                        # pc = point_cloud(points2, gs.target_frame)
+                        # gs.pc_pub_plane.publish(pc)
 
-                        not_nan = []
-                        for p in points2:
-                            if not math.isnan(np.sum(p)) and not math.isinf(np.sum(p)):
-                                not_nan.append(p[:3])
+                        sums = np.sum(points2[:,:3], 1)
+                        # bla = points2[~np.isnan(sums) and ~np.isinf(sums), :3]
+
+                        not_nan = points2[np.logical_and(~np.isnan(sums), ~np.isinf(sums)),:3]
+
+
+                        # not_nan = []
+                        # for p in points2:
+                        #     if not math.isnan(np.sum(p)) and not math.isinf(np.sum(p)):
+                        #         not_nan.append(p[:3])
                         not_nan = np.array(not_nan)
                         not_nan=not_nan.transpose()
 
+                        # print(np.shape(not_nan))
+
                         try:
-                            # print(np.min(not_nan[0][:]), np.mean(not_nan[0][:]), np.max(not_nan[0][:]), np.median(not_nan[0][:]))
-                            # print("\n")
-                            # print(np.min(not_nan[1][:]), np.mean(not_nan[1][:]), np.max(not_nan[1][:]), np.median(not_nan[1][:]))
-                            # print("\n")
-                            # print(np.min(not_nan[2][:]), np.mean(not_nan[2][:]), np.max(not_nan[2][:]), np.median(not_nan[2][:]))
-                            # print("\n")
-                            # print("r x: ", np.max(not_nan[0][:])-np.min(not_nan[0][:]))
-                            # print("r y: ", np.max(not_nan[1][:])-np.min(not_nan[1][:]))
 
                             msg = PointStamped()
                             msg.header = Header(frame_id=gs.target_frame, stamp=rospy.Time.now())
-                            msg.point.x = np.mean(not_nan[0][:])
-                            # msg.point.y = np.mean(not_nan[1][:]-0.08) # 8cm od sredine za impedancija eksp s pikanjem
-                            # msg.point.z = np.mean(not_nan[2][:]+0.165) # pomak od panda_link8 do vrha senzora
-
-                            msg.point.y = np.mean(not_nan[1][:]-0.0) # 8cm od sredine za impedancija eksp s pikanjem
-                            msg.point.z = np.mean(not_nan[2][:]+0.) # pomak od panda_link8 do vrha senzora
+                            msg.point.x = np.median(not_nan[0][:])
+                            # msg.point.y = np.mean(not_nan[1][:]-0.0) # 8cm od sredine za impedancija eksp s pikanjem
+                            msg.point.y = np.min(not_nan[1][:]+0.03) # 8cm od sredine za impedancija eksp s pikanjem
+                            
+                            msg.point.z = np.mean(not_nan[2][:]+0.165) # pomak od panda_link8 do vrha senzora
 
 
                             gs.ground_center_pub.publish(msg)
